@@ -1,11 +1,16 @@
 import pandas as pd
 import joblib
+from flask import Flask, request, jsonify
 
-# ------------------ LOAD SCALER ------------------
-scaler_filename = 'scaler.joblib'
-loaded_scaler = joblib.load(scaler_filename)
+# ------------------ INITIALIZE APP ------------------
+app = Flask(__name__)
 
-print(f"✅ Scaler loaded from '{scaler_filename}'")
+# ------------------ LOAD FILES ------------------
+model = joblib.load("random_forest_model.joblib")
+loaded_scaler = joblib.load("scaler.joblib")
+reference_feature_columns = joblib.load("columns.pkl")
+
+print("✅ Model, Scaler, and Columns loaded successfully")
 
 # ------------------ DEFINE NUMERICAL COLUMNS ------------------
 numerical_cols = ['survey_year', 'age']
@@ -14,7 +19,7 @@ numerical_cols = ['survey_year', 'age']
 def preprocess_input(data_dict, reference_columns):
     input_df = pd.DataFrame([data_dict])
 
-    # Handle gender mapping
+    # Gender mapping
     if 'gender' in input_df.columns:
         input_df['gender'] = input_df['gender'].replace({
             'Other': 'Other / Prefer not to say'
@@ -31,56 +36,49 @@ def preprocess_input(data_dict, reference_columns):
     input_encoded = pd.get_dummies(input_df, drop_first=True)
 
     # ------------------ ALIGN COLUMNS ------------------
-    # Add missing columns
     for col in reference_columns:
         if col not in input_encoded.columns:
             input_encoded[col] = 0
 
-    # Remove extra columns
     input_encoded = input_encoded[reference_columns]
 
     return input_encoded
 
 
-# ------------------ EXAMPLE INPUT ------------------
-sample_survey_response = {
-    'survey_year': 2023,
-    'age': 30,
-    'gender': 'Male',
-    'country': 'United States',
-    'self_employed': 'No',
-    'family_history': 'Yes',
-    'work_interfere': 'Sometimes',
-    'no_employees': '26-100',
-    'remote_work': 'Yes',
-    'tech_company': 'Yes',
-    'benefits': 'Yes',
-    'care_options': 'Yes',
-    'wellness_program': 'No',
-    'seek_help': 'Yes',
-    'anonymity': 'Yes',
-    'leave': 'Somewhat easy',
-    'mental_health_consequence': 'No',
-    'phys_health_consequence': 'No',
-    'coworkers': 'Yes',
-    'supervisor': 'Yes',
-    'mental_health_interview': 'No',
-    'phys_health_interview': 'No',
-    'mental_vs_physical': 'Yes',
-    'obs_consequence': 'No'
-}
+# ------------------ API ROUTE ------------------
+@app.route('/predict', methods=['POST'])
+def predict():
+    try:
+        data = request.get_json()
 
-# ------------------ LOAD REFERENCE COLUMNS ------------------
-reference_feature_columns = joblib.load("columns.pkl")
+        if not data:
+            return jsonify({"error": "No input data provided"}), 400
 
-# ------------------ TEST ------------------
-preprocessed_sample = preprocess_input(
-    sample_survey_response,
-    reference_feature_columns
-)
+        processed_data = preprocess_input(data, reference_feature_columns)
 
-print("✅ Preprocessed sample input:")
-print(preprocessed_sample.head())
+        prediction = model.predict(processed_data)[0]
+        probability = model.predict_proba(processed_data)[0].max()
 
-print("Shape:", preprocessed_sample.shape)
-print("Columns match:", list(preprocessed_sample.columns) == reference_feature_columns)
+        return jsonify({
+            "prediction": int(prediction),
+            "confidence": float(probability),
+            "status": "success"
+        })
+
+    except Exception as e:
+        return jsonify({
+            "error": str(e),
+            "status": "failed"
+        }), 500
+
+
+# ------------------ HOME ROUTE ------------------
+@app.route('/')
+def home():
+    return "🚀 Mental Health Prediction API Running"
+
+
+# ------------------ TEST (OPTIONAL) ------------------
+if __name__ == "__main__":
+    print("🚀 Starting Random Forest API...")
+    app.run(host="0.0.0.0", port=5000, debug=True)
