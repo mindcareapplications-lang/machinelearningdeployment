@@ -6,91 +6,100 @@ from flask_cors import CORS
 
 # ------------------ INITIALIZE APP ------------------
 app = Flask(__name__)
-CORS(app)  # Enables cross-origin requests for your frontend
+CORS(app)
+
+# ------------------ GLOBAL VARIABLES ------------------
+MODEL = None
+SCALER = None
+COLUMNS = None
+
+NUMERICAL_COLS = ['survey_year', 'age']
 
 # ------------------ LOAD ASSETS ------------------
 def load_model_assets():
-    """Loads all necessary machine learning files globally."""
+    global MODEL, SCALER, COLUMNS
     try:
-        # These filenames must match exactly what you uploaded to GitHub
-        model = joblib.load("random_forest_model.joblib")
-        scaler = joblib.load("scaler.joblib")
-        columns = joblib.load("columns.pkl")
-        print("✅ Success: Model, Scaler, and Columns loaded.")
-        return model, scaler, columns
+        print("📂 Files in directory:", os.listdir())
+
+        MODEL = joblib.load("random_forest_model.joblib")
+        SCALER = joblib.load("scaler.joblib")
+        COLUMNS = joblib.load("columns.pkl")
+
+        print("✅ Model, Scaler, Columns loaded successfully")
+
     except Exception as e:
         print(f"❌ Error loading assets: {e}")
-        return None, None, None
+        MODEL, SCALER, COLUMNS = None, None, None
 
-# Load assets once when the server starts
-loaded_model, loaded_scaler, reference_feature_columns = load_model_assets()
 
-# Constants from training
-NUMERICAL_COLS = ['survey_year', 'age']
+# Load assets at startup
+load_model_assets()
+
 
 # ------------------ PREPROCESS FUNCTION ------------------
-def preprocess_input(data_dict, reference_columns, scaler):
-    """
-    Transforms raw JSON input into the exact format required by the model.
-    """
-    # 1. Convert to DataFrame
+def preprocess_input(data_dict):
     input_df = pd.DataFrame([data_dict])
 
-    # 2. Standardize Gender (Matches your Colab notebook logic)
+    # Handle gender mapping
     if 'gender' in input_df.columns:
         input_df['gender'] = input_df['gender'].replace({
             'Other': 'Other / Prefer not to say'
         })
 
-    # 3. Apply Scaling
-    if all(col in input_df.columns for col in NUMERICAL_COLS):
-        input_df[NUMERICAL_COLS] = scaler.transform(input_df[NUMERICAL_COLS])
+    # ------------------ SCALING ------------------
+    if SCALER:
+        missing_cols = [col for col in NUMERICAL_COLS if col not in input_df.columns]
+        if missing_cols:
+            raise ValueError(f"Missing numerical columns: {missing_cols}")
 
-    # 4. One-Hot Encoding
+        input_df[NUMERICAL_COLS] = SCALER.transform(input_df[NUMERICAL_COLS])
+
+    # ------------------ ONE HOT ENCODING ------------------
     input_encoded = pd.get_dummies(input_df, drop_first=True)
 
-    # 5. Align Columns (Crucial Step)
-    # This adds missing columns as 0 and removes extra ones to match training data
-    input_final = input_encoded.reindex(columns=reference_columns, fill_value=0)
+    # ------------------ ALIGN COLUMNS ------------------
+    input_final = input_encoded.reindex(columns=COLUMNS, fill_value=0)
 
     return input_final
 
-# ------------------ API ROUTES ------------------
+
+# ------------------ ROUTES ------------------
 
 @app.route('/')
 def home():
-    """Health check route to verify the service is live."""
-    status = "Online" if loaded_model else "Degraded (Assets Missing)"
+    status = "Online" if MODEL else "Degraded"
     return jsonify({
         "service": "MindForge Prediction API",
         "status": status,
-        "message": "Send a POST request to /predict"
+        "message": "POST data to /predict"
     })
+
 
 @app.route('/predict', methods=['POST'])
 def predict():
-    """Handles incoming prediction requests."""
-    if not loaded_model:
-        return jsonify({"error": "Model files not found on server"}), 500
+    if MODEL is None:
+        return jsonify({
+            "status": "error",
+            "message": "Model not loaded properly"
+        }), 500
 
     try:
-        # Parse incoming JSON
         data = request.get_json(force=True)
+
         if not data:
-            return jsonify({"error": "No data provided"}), 400
+            return jsonify({"error": "No input data"}), 400
 
-        # Preprocess the data
-        processed_data = preprocess_input(data, reference_feature_columns, loaded_scaler)
+        # Preprocess
+        processed = preprocess_input(data)
 
-        # Generate Prediction
-        # [:, 1] gets the probability for the 'Yes' class (treatment needed)
-        prediction_proba = loaded_model.predict_proba(processed_data)[:, 1][0]
-        prediction_label = "Yes" if prediction_proba > 0.5 else "No"
+        # Predict
+        proba = MODEL.predict_proba(processed)[0][1]
+        prediction = "High Risk" if proba > 0.5 else "Low Risk"
 
         return jsonify({
             "status": "success",
-            "prediction": prediction_label,
-            "probability": round(float(prediction_proba), 4)
+            "prediction": prediction,
+            "probability": round(float(proba), 4)
         })
 
     except Exception as e:
@@ -99,10 +108,9 @@ def predict():
             "error": str(e)
         }), 500
 
+
 # ------------------ START SERVER ------------------
 if __name__ == "__main__":
-    # Render assigns a port dynamically via environment variables
-    port = int(os.environ.get("PORT", 5000))
-    
-    # Use 0.0.0.0 to allow external traffic in cloud environments
+    port = int(os.environ.get("PORT", 10000))
+    print(f"🚀 Starting server on port {port}")
     app.run(host="0.0.0.0", port=port)
