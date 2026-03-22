@@ -96,6 +96,7 @@ def predict():
             return jsonify({'error': str(e)}), 400
 
 if __name__ == '__main__':
-    # For local development, use debug=True. For Render deployment, Render manages this.
-    # We use 0.0.0.0 to make the Flask app accessible from outside the container in some environments.
-    app.run(debug=True, host='0.0.0.0')
+    # Render provides a PORT environment variable; we MUST use it.
+    port = int(os.environ.get("PORT", 5000))
+    # Use 0.0.0.0 to let Render connect to the app
+    app.run(host='0.0.0.0', port=port)
