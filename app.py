@@ -1,116 +1,90 @@
-import os
 import joblib
 import pandas as pd
 from flask import Flask, request, jsonify
-from flask_cors import CORS
 
-# ------------------ INITIALIZE APP ------------------
 app = Flask(__name__)
-CORS(app)
 
-# ------------------ GLOBAL VARIABLES ------------------
-MODEL = None
-SCALER = None
-COLUMNS = None
+# 1. Load the trained model and label encoder
+# Ensure these files are in the same directory as app.py
+try:
+    model = joblib.load('random_forest_model.joblib')
+    le = joblib.load('label_encoder.joblib')
+except FileNotFoundError:
+    print("Error: Model or LabelEncoder files not found. Please export them from Colab first.")
 
-NUMERICAL_COLS = ['survey_year', 'age']
+# 2. Define the exact columns used during model training
+# This is CRITICAL to ensure the model receives data in the correct format/order
+MODEL_COLUMNS = [
+    'respondent_id', 'survey_year', 'age', 'gender_Male',
+    'gender_Non-binary', 'gender_Other / Prefer not to say',
+    'country_Brazil', 'country_Canada', 'country_France', 'country_Germany',
+    'country_India', 'country_Mexico', 'country_Other',
+    'country_United Kingdom', 'country_United States',
+    'country_colombia', 'self_employed_Yes', 'family_history_Yes',
+    'work_interfere_Often', 'work_interfere_Rarely',
+    'work_interfere_Sometimes', 'no_employees_100-500',
+    'no_employees_26-100', 'no_employees_500-Jan', 'no_employees_6-25',
+    'no_employees_More than 1000', 'remote_work_Yes', 'tech_company_Yes',
+    'benefits_No', 'benefits_Not sure', 'care_options_No',
+    'care_options_Not sure', 'wellness_program_No',
+    'wellness_program_Not sure', 'seek_help_No', 'seek_help_Not sure',
+    'anonymity_Yes', 'anonymity_Not sure', "leave_Don't know",
+    'leave_Somewhat difficult', 'leave_Somewhat easy', 'leave_Very easy',
+    'mental_health_consequence_No', 'mental_health_consequence_Yes',
+    'phys_health_consequence_No', 'phys_health_consequence_Yes',
+    'coworkers_Some of them', 'coworkers_Yes',
+    'supervisor_Some of them', 'supervisor_Yes',
+    'mental_health_interview_No', 'mental_health_interview_Yes',
+    'phys_health_interview_No', 'phys_health_interview_Yes',
+    'mental_vs_physical_No', 'mental_vs_physical_Yes',
+    'obs_consequence_Yes'
+]
 
-# ------------------ LOAD ASSETS ------------------
-def load_model_assets():
-    global MODEL, SCALER, COLUMNS
-    try:
-        print("📂 Files in directory:", os.listdir())
-
-        MODEL = joblib.load("random_forest_model.joblib")
-        SCALER = joblib.load("scaler.joblib")
-        COLUMNS = joblib.load("columns.pkl")
-
-        print("✅ Model, Scaler, Columns loaded successfully")
-
-    except Exception as e:
-        print(f"❌ Error loading assets: {e}")
-        MODEL, SCALER, COLUMNS = None, None, None
-
-
-# Load assets at startup
-load_model_assets()
-
-
-# ------------------ PREPROCESS FUNCTION ------------------
-def preprocess_input(data_dict):
-    input_df = pd.DataFrame([data_dict])
-
-    # Handle gender mapping
-    if 'gender' in input_df.columns:
-        input_df['gender'] = input_df['gender'].replace({
-            'Other': 'Other / Prefer not to say'
-        })
-
-    # ------------------ SCALING ------------------
-    if SCALER:
-        missing_cols = [col for col in NUMERICAL_COLS if col not in input_df.columns]
-        if missing_cols:
-            raise ValueError(f"Missing numerical columns: {missing_cols}")
-
-        input_df[NUMERICAL_COLS] = SCALER.transform(input_df[NUMERICAL_COLS])
-
-    # ------------------ ONE HOT ENCODING ------------------
-    input_encoded = pd.get_dummies(input_df, drop_first=True)
-
-    # ------------------ ALIGN COLUMNS ------------------
-    input_final = input_encoded.reindex(columns=COLUMNS, fill_value=0)
-
-    return input_final
-
-
-# ------------------ ROUTES ------------------
-
-@app.route('/')
-def home():
-    status = "Online" if MODEL else "Degraded"
-    return jsonify({
-        "service": "MindForge Prediction API",
-        "status": status,
-        "message": "POST data to /predict"
-    })
-
+# Categorical columns that need one-hot encoding
+CATEGORICAL_COLS = [
+    'gender', 'country', 'self_employed', 'family_history', 'work_interfere',
+    'no_employees', 'remote_work', 'tech_company', 'benefits', 'care_options',
+    'wellness_program', 'seek_help', 'anonymity', 'leave',
+    'mental_health_consequence', 'phys_health_consequence', 'coworkers',
+    'supervisor', 'mental_health_interview', 'phys_health_interview',
+    'mental_vs_physical', 'obs_consequence'
+]
 
 @app.route('/predict', methods=['POST'])
 def predict():
-    if MODEL is None:
-        return jsonify({
-            "status": "error",
-            "message": "Model not loaded properly"
-        }), 500
-
     try:
+        # Get JSON data from request
         data = request.get_json(force=True)
+        
+        # Convert input to DataFrame
+        input_df = pd.DataFrame([data])
 
-        if not data:
-            return jsonify({"error": "No input data"}), 400
+        # Apply one-hot encoding
+        # Note: drop_first=True must match your training phase
+        input_encoded = pd.get_dummies(input_df, columns=CATEGORICAL_COLS, drop_first=True)
 
-        # Preprocess
-        processed = preprocess_input(data)
+        # Reindex: This adds missing columns as 0 and removes extra columns
+        # This ensures the input matches the 57 columns the model expects
+        final_input = input_encoded.reindex(columns=MODEL_COLUMNS, fill_value=0)
 
-        # Predict
-        proba = MODEL.predict_proba(processed)[0][1]
-        prediction = "High Risk" if proba > 0.5 else "Low Risk"
+        # Make prediction
+        prediction_encoded = model.predict(final_input)
+
+        # Decode the prediction (e.g., 0/1 back to 'No'/'Yes')
+        prediction_label = le.inverse_transform(prediction_encoded)
 
         return jsonify({
-            "status": "success",
-            "prediction": prediction,
-            "probability": round(float(proba), 4)
+            'status': 'success',
+            'prediction': str(prediction_label[0])
         })
 
     except Exception as e:
-        return jsonify({
-            "status": "failed",
-            "error": str(e)
-        }), 500
+        return jsonify({'status': 'error', 'message': str(e)}), 400
 
+@app.route('/', methods=['GET'])
+def index():
+    return "Mental Health Prediction API is running."
 
-# ------------------ START SERVER ------------------
-if __name__ == "__main__":
-    port = int(os.environ.get("PORT", 10000))
-    print(f"🚀 Starting server on port {port}")
-    app.run(host="0.0.0.0", port=port)
+if __name__ == '__main__':
+    # host='0.0.0.0' allows connections from outside the local machine
+    app.run(debug=True, host='0.0.0.0', port=5000)
