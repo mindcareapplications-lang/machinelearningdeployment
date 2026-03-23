@@ -4,6 +4,9 @@ from flask import Flask, request, jsonify
 from sklearn.preprocessing import LabelEncoder
 import os
 import sys # Import sys for exiting the application
+@app.route('/')
+def home():
+    return "<h1>MindCare ML API is Live!</h1><p>The model is ready. Send a POST request to /predict to get started.</p>"
 
 app = Flask(__name__)
 
