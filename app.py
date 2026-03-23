@@ -11,6 +11,12 @@ model = joblib.load('random_forest_model.joblib')
 # Load the LabelEncoder object
 le = joblib.load('label_encoder.joblib')
 
+
+
+@app.route('/')
+def home():
+    return {"status": "online", "message": "ML API is running"}, 200
+
 # Columns used in the X_encoded DataFrame during training
 model_columns = ['respondent_id', 'survey_year', 'age', 'gender_Male',
        'gender_Non-binary', 'gender_Other / Prefer not to say',
