@@ -15,29 +15,26 @@ le = joblib.load('label_encoder.joblib')
 
 # 3. Define Column Lists
 model_columns = [
-    'respondent_id', 'survey_year', 'age', 'gender_Male',
-    'gender_Non-binary', 'gender_Other / Prefer not to say',
-    'country_Brazil', 'country_Canada', 'country_France', 'country_Germany',
-    'country_India', 'country_Mexico', 'country_Other',
-    'country_United Kingdom', 'country_United States',
-    'country_colombia', 'self_employed_Yes', 'family_history_Yes',
-    'work_interfere_Often', 'work_interfere_Rarely',
+    'survey_year', 'age', 'gender_Male', 'gender_Non-binary',
+    'gender_Other / Prefer not to say', 'country_Brazil', 'country_Canada',
+    'country_France', 'country_Germany', 'country_India', 'country_Ireland',
+    'country_Netherlands', 'country_Other', 'country_Sweden',
+    'country_United Kingdom', 'country_United States', 'self_employed_Yes',
+    'family_history_Yes', 'work_interfere_Often', 'work_interfere_Rarely',
     'work_interfere_Sometimes', 'no_employees_100-500',
-    'no_employees_26-100', 'no_employees_500-Jan', 'no_employees_6-25',
+    'no_employees_26-100', 'no_employees_500-1000', 'no_employees_6-25',
     'no_employees_More than 1000', 'remote_work_Yes', 'tech_company_Yes',
-    'benefits_No', 'benefits_Not sure', 'care_options_No',
-    'care_options_Not sure', 'wellness_program_No',
-    'wellness_program_Not sure', 'seek_help_No', 'seek_help_Not sure',
-    'anonymity_Yes', 'anonymity_Not sure', 'leave_Don\'t know',
-    'leave_Somewhat difficult', 'leave_Somewhat easy', 'leave_Very easy',
-    'mental_health_consequence_No', 'mental_health_consequence_Yes',
-    'phys_health_consequence_No', 'phys_health_consequence_Yes',
-    'coworkers_Some of them', 'coworkers_Yes',
+    'benefits_No', 'benefits_Yes', 'care_options_No', 'care_options_Yes',
+    'wellness_program_No', 'wellness_program_Yes', 'seek_help_No',
+    'seek_help_Yes', 'anonymity_No', 'anonymity_Yes',
+    'leave_Somewhat difficult', 'leave_Somewhat easy', 'leave_Very difficult',
+    'leave_Very easy', 'mental_health_consequence_No',
+    'mental_health_consequence_Yes', 'phys_health_consequence_No',
+    'phys_health_consequence_Yes', 'coworkers_Some of them', 'coworkers_Yes',
     'supervisor_Some of them', 'supervisor_Yes',
     'mental_health_interview_No', 'mental_health_interview_Yes',
     'phys_health_interview_No', 'phys_health_interview_Yes',
-    'mental_vs_physical_No', 'mental_vs_physical_Yes',
-    'obs_consequence_Yes'
+    'mental_vs_physical_No', 'mental_vs_physical_Yes', 'obs_consequence_Yes'
 ]
 
 original_categorical_cols = [
